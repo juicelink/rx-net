@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+option csharp_namespace = "GrpcService.Protos";
+
+package myservice;
+
+service MyService {
+
+  rpc ReadEvent (GetEventRequest) returns (Event);
+  rpc PushEvent (Event) returns (google.protobuf.Empty);
+
+  rpc ReadEvents (GetEventsRequest) returns (stream Event);
+
+  rpc PushEvents (stream Event) returns (google.protobuf.Empty);
+}
+
+
+message GetEventRequest {
+  int32 id = 1;
+}
+
+message GetEventsRequest {
+  int32 delayMs = 1;
+  int32 maxNbEvents = 2;
+}
+
+message Event {
+  int32 id = 1;
+  string value = 2;
+}
+
