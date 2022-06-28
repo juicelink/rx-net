@@ -25,6 +25,18 @@ public class Tests : BaseTests
     [Fact]
     public async Task Test()
     {
+        await CreateSample(10)
+            .Do(v => Logger.LogInformation(v.ToString()));
+    }
 
+    private IObservable<int> CreateSample(int? nb = null)
+    {
+        var random = new Random();
+        return Observable
+            .Range(1, nb ?? int.MaxValue)
+            .Select(
+                v => Observable.Return(v)
+                    .Delay(TimeSpan.FromMilliseconds(random.Next(100, 500))))
+            .Concat();
     }
 }
