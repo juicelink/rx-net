@@ -37,13 +37,45 @@ public class GrpcClient
         }
     }
 
-    public IObservable<Event> GetObservableEvents(int? maxNbEvents = null, int? delayMs = null) => null;
+    public IObservable<Event> GetObservableEvents(int? maxNbEvents = null, int? delayMs = null)
+    {
+        return Observable.Create<Event>(async (observer, token) =>
+        {
+            _logger.LogTrace("start reading event stream");
 
+            var stream = _client.ReadEvents(new GetEventsRequest
+                { MaxNbEvents = maxNbEvents ?? 0, DelayMs = delayMs ?? 0 }, cancellationToken: token)
+                .ResponseStream;
+            
+            if (token.IsCancellationRequested) return;
+            var hasData = await stream.MoveNext();
+            while (hasData)
+            {
+                observer.OnNext(stream.Current);
+                _logger.LogTrace("pushed event {id} in stream", stream.Current.Id);
+                if (token.IsCancellationRequested) return;
+                hasData = await stream.MoveNext();
+            }
+
+            observer.OnCompleted();
+        });
+    }
+
+    
+    
+    
     public IObservable<Event> GetObservableEvents(IObservable<int> nbEndedEvents, int? maxNbEvents = null,
         int? delayMs = null) => null;
 
 
-    public IObservable<Unit> PushEvents(IObservable<Event> events) => null;
+    public IObservable<Unit> PushEvents(IObservable<Event> events) => Observable.Defer(() =>
+    {
+        var stream = _client.PushEvents().RequestStream;
+        return events.Select(e => Observable.FromAsync(() => stream.WriteAsync(e)))
+            .Concat()
+            .LastOrDefaultAsync()
+            .SelectMany(_ => Observable.FromAsync(stream.CompleteAsync));
+    });
 
     public GrpcClient SetLogger(ILogger logger)
     {

@@ -31,5 +31,16 @@ public static class ObservableExtensions
                 })
             .SelectMany(v => v.result);
 
-    public static IObservable<T> RetryAfterDelay<T>(this IObservable<T> source, TimeSpan delay) => null;
+    public static IObservable<T> RetryAfterDelay<T>(this IObservable<T> source, TimeSpan delay)
+    {
+        return RepeateInfinite(source, delay).Catch();
+    }
+
+    private static IEnumerable<IObservable<TSource>> RepeateInfinite<TSource>(IObservable<TSource> source, TimeSpan delay)
+    {
+        yield return source;
+
+        while (true)
+            yield return source.DelaySubscription(delay);
+    }
 }

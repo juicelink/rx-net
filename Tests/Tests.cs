@@ -4,6 +4,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Reactive.Threading.Tasks;
+using GrpcService.Protos;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RxLibrary;
@@ -228,7 +229,100 @@ public class Tests : BaseTests
         await Task.WhenAll(firstStream.DefaultIfEmpty().ToTask(), secondStream.DefaultIfEmpty().ToTask());
     }
 
+    [Fact]
+    public async Task TestGetGrpcEvents()
+    {
 
+        try
+        {
+            var result = await _grpcClient.GetObservableEvents(50).Take(2)
+                .Do(
+                    _ => { },
+                    ex => Logger.LogError(ex.Message)
+                )
+                .Catch<Event, Exception>(ex =>
+                {
+                    Logger.LogError(ex.Message);
+                    return Observable.Empty<Event>();
+                }).DefaultIfEmpty();
+        }
+
+        catch(Exception ex)
+        {
+            Logger.LogError( "global try catch {msg}", ex.Message);
+        }
+    }
+
+    [Fact]
+    public async Task TestGetGrpcEventsContinuousStream()
+    {
+
+        await _grpcClient.GetObservableEvents().RetryAfterDelay(TimeSpan.FromSeconds(5))
+            .Do(_ =>
+            {
+
+            });
+    }
+
+    [Fact]
+    public async Task TestCatch()
+    {
+        IObservable<int> createStream()
+        {
+            return Observable.Defer(() =>
+            {
+                throw new Exception("unhandled");
+                var stream = Observable.Range(1, 3)
+                    .Select(v => Observable.Return(v).Delay(TimeSpan.FromMilliseconds(10))).Concat()
+                    .Concat(Observable.Throw<int>(new Exception("error")));
+                return stream;
+            });
+        }
+
+        
+
+        var result = await createStream().Catch<int, Exception>(ex =>
+        {
+            Logger.LogError(ex.Message);
+            return Observable.Return(-1);
+        }).ToArray();
+    }
+
+    [Fact]
+    public async Task TestOnErrorResumeNext()
+    {
+        var stream = Observable.Range(1, 3)
+            .Select(v => Observable.Return(v).Delay(TimeSpan.FromMilliseconds(10))).Concat()
+            .Concat(Observable.Throw<int>(new Exception("error")));
+
+        var result = await stream.OnErrorResumeNext(Observable.Return(-1)).ToArray();
+        Logger.LogInformation("{data}", result);
+    }
+
+    [Fact]
+    public async Task HandleErrors()
+    {
+        IObservable<int> eventsStream()
+        {
+            var a = Array.Empty<int>();
+            var i = a[0];
+            return Observable.Return(a)
+                .SelectMany(async a =>
+                {
+                    await Task.Delay(500);
+                    return a;
+                })
+                .Select(array => array[0]);
+        }
+
+        await Observable.Defer(eventsStream).Catch<int, Exception>(ex =>
+        {
+            Logger.LogError(ex, "stream failed");
+            return Observable.Empty<int>();
+        }).Select(_ => Unit.Default).LastOrDefaultAsync();
+
+        Logger.LogInformation("done");
+    }
 
     private IObservable<int> CreateSample(int? nb = null)
     {
