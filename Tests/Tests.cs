@@ -143,8 +143,10 @@ public class Tests : BaseTests
     [Fact]
     public async Task TestBuffer()
     {
-        await CreateSample(50).Buffer(TimeSpan.FromSeconds(1), 5)
+        var stream = CreateSample(50).Buffer(TimeSpan.FromSeconds(1), 5)
             .Do(l => Logger.LogInformation("{l}", l));
+        await stream;
+        await stream;
     }
 
     [Fact]
@@ -181,6 +183,49 @@ public class Tests : BaseTests
 
         var end = await CreateSample(10).Select(v => TransfromObservable(v)).Concat()
             .Do(str => Logger.LogInformation(str));
+    }
+
+    [Fact]
+    public async Task TestSubject()
+    {
+
+        var hot = GenerateDelayedEvents(10)
+            .Do(v => Logger.LogInformation("{v}", v))
+            .Publish().RefCount();
+
+        await hot.Zip(hot, (left, right) => (left, right))
+            .Do(v => Logger.LogInformation("{v}", v));
+    }
+
+    [Fact]
+    public async Task TestSubject_X()
+    {
+
+        var connectable = GenerateDelayedEvents(10).Publish();
+
+        await connectable
+            .Do(_ => { });
+
+        connectable.Connect();
+
+    }
+
+    [Fact]
+    public async Task TestMultipleConsumers()
+    {
+        var source = GenerateDelayedEvents(5)
+            .Do(e => Logger.LogTrace("received {id}", e))
+            .Publish().RefCount();
+
+
+        var firstStream = source.Select(e => $"fst {e}")
+            .Do(data => Logger.LogWarning("output {data}", data));
+        var secondStream = source.Select(e => $"snd {e}")
+            .Do(data => Logger.LogWarning("output {data}", data));
+
+        await Task.WhenAll(firstStream.ToTask(), secondStream.ToTask());
+
+        await Task.WhenAll(firstStream.DefaultIfEmpty().ToTask(), secondStream.DefaultIfEmpty().ToTask());
     }
 
 
