@@ -41,7 +41,6 @@ namespace GrpcService.Services
             var nb = 0;
             while (!context.CancellationToken.IsCancellationRequested && (request.MaxNbEvents <= 0 || nb < request.MaxNbEvents))
             {
-                await Task.Delay(waitTime);
                 var id = (++nb);
                 var @event = new Event
                 {
@@ -50,6 +49,7 @@ namespace GrpcService.Services
                 };
                 _logger.LogInformation("sent event {id} on streaming call", @event.Id);
                 await responseStream.WriteAsync(@event);
+                await Task.Delay(waitTime);
             }
         }
 
