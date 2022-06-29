@@ -29,6 +29,27 @@ public class Tests : BaseTests
             .Do(v => Logger.LogInformation(v.ToString()));
     }
 
+    [Fact]
+    public async Task TestScheduler()
+    {
+        var u = await Observable.Return(1, TaskPoolScheduler.Default).Repeat().Take(1);
+    }
+
+    [Fact]
+    public async Task TestSelectMany()
+    {
+        var random = new Random();
+        async Task<string> Transform(int id)
+        {
+            await Task.Delay(random.Next(200, 1000));
+            return id.ToString();
+        }
+
+        await CreateSample(10).Select(v => Transform(v));
+    }
+
+
+
     private IObservable<int> CreateSample(int? nb = null)
     {
         var random = new Random();
