@@ -39,7 +39,7 @@ namespace GrpcService.Services
         {
             var waitTime = TimeSpan.FromMilliseconds(request.DelayMs <= 0 ? 500  : request.DelayMs);
             var nb = 0;
-            while (!context.CancellationToken.IsCancellationRequested && request.MaxNbEvents <= 0 || nb < request.MaxNbEvents)
+            while (!context.CancellationToken.IsCancellationRequested && (request.MaxNbEvents <= 0 || nb < request.MaxNbEvents))
             {
                 await Task.Delay(waitTime);
                 var id = (++nb);
