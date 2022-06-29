@@ -41,11 +41,53 @@ public class Tests : BaseTests
         var random = new Random();
         async Task<string> Transform(int id)
         {
+            ///
             await Task.Delay(random.Next(200, 1000));
             return id.ToString();
         }
 
-        await CreateSample(10).Select(v => Transform(v));
+        IObservable<string> TransfromObservable (int id)
+            => Observable.FromAsync(() => Transform(id));
+
+        var end = await CreateSample(10).Select(v => TransfromObservable(v)).Merge(5)
+            .Do(str => Logger.LogInformation(str));
+    }
+
+    [Fact]
+    public async Task TestSelectManyOrdered()
+    {
+        var random = new Random();
+        async Task<string> Transform(int id)
+        {
+            ///
+            await Task.Delay(random.Next(200, 1000));
+            return id.ToString();
+        }
+
+        IObservable<string> TransfromObservable(int id)
+            => Observable.FromAsync(() => Transform(id));
+
+        await Observable.Range(1, 10)
+            .SelectManyOrdered(TransfromObservable, 50)
+            .Do(e => Logger.LogWarning("event output {id}", e));
+    }
+
+    [Fact]
+    public async Task TestConcat()
+    {
+        var random = new Random();
+        async Task<string> Transform(int id)
+        {
+            ///
+            await Task.Delay(random.Next(200, 1000));
+            return id.ToString();
+        }
+
+        IObservable<string> TransfromObservable(int id)
+            => Observable.FromAsync(() => Transform(id));
+
+        var end = await CreateSample(10).Select(v => TransfromObservable(v)).Concat()
+            .Do(str => Logger.LogInformation(str));
     }
 
 
