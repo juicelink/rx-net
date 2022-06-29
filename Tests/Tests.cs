@@ -324,6 +324,142 @@ public class Tests : BaseTests
         Logger.LogInformation("done");
     }
 
+
+    [Fact]
+    public async Task TestParallelization()
+    {
+        var random = new Random();
+        var array = await Observable.Range(1, 10)
+            .Select(v =>
+                Observable.Defer(() =>
+                Observable.Start(() =>
+            {
+                Logger.LogInformation("before sleep {v}, thread: {thread}", v, Thread.CurrentThread.ManagedThreadId);
+                Thread.Sleep(TimeSpan.FromMilliseconds(random.Next(1000, 2000)));
+                Logger.LogInformation("id: {id}, thread: {thread}", v, Thread.CurrentThread.ManagedThreadId);
+
+                return $"{v}";
+            }))).Merge(2);
+    }
+
+    [Fact]
+    public async Task TestBackPressure()
+    {
+        var nbEventsProcessed = new BehaviorSubject<int>(0);
+
+        var source = _grpcClient.GetObservableEvents(nbEventsProcessed, delayMs: 1, maxConcurrentNb: 10)
+                .Do(e => Logger.LogTrace($"start processing {e.Id}"))
+                .SelectMany(_ => Observable.Return(1).Delay(TimeSpan.FromMilliseconds(1000))) //do some stuff and return nb events processed
+                .Scan(0, (acc, v) => acc + v)
+                .StartWith(0) // not necessary here, initialize stream with seed value
+            ;
+
+        var done = false;
+
+        source.Subscribe((v) =>
+        {
+            nbEventsProcessed.OnNext(v);
+        }, () => done = true);
+
+        while (!done)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+        nbEventsProcessed.OnCompleted();
+    }
+
+    [Fact]
+
+    public async Task TestAsyncEmptyObservable()
+    {
+        var u = await Observable.Empty<int>().ToArray();
+    }
+
+    [Fact]
+
+    public async Task TestAsyncObservable()
+    {
+        var v = await new[]{1, 1, 1, 2, 3, 3, 1, 2}.ToObservable().DistinctUntilChanged().ToArray();
+        Logger.LogInformation("{v}", v);
+    }
+
+    [Fact]
+    public async Task TestScanDistinct()
+    {
+        var random = new Random();
+        var events =
+            Observable.Generate(0,
+                s => s < 10, 
+                s => s + 1, _ => random.Next(1, 5));
+
+        await events
+            .Do(v => Logger.LogInformation("input {v}", v))
+            .Scan((ids: new HashSet<int>(), result: Observable.Empty<int>()), (acc, current) =>
+            {
+                if (acc.ids.Contains(current)) return (acc.ids, Observable.Empty<int>());
+                acc.ids.Add(current);
+                return (acc.ids, Observable.Return(current));
+            })
+            .SelectMany(acc => acc.result)
+            .Do(v => Logger.LogWarning("distinct {v}", v));
+    }
+
+    [Fact]
+    public async Task TestCount()
+    {
+        var count = 0;
+        var total = await new[]{7, 3, 5}.ToObservable()
+            .Select(_ => count++)
+            .ToArray();
+        Logger.LogInformation("{r}", total);
+    }
+
+    [Fact]
+    public async Task TestAddDataToStream()
+    {
+        var currentStream = Observable.Range(1, 5)
+            .Select(_ => new Data { Count = _ })
+            .WithLatestFrom(
+                Observable.Return(new Event()), (data, @event) => (data, @event))
+            .Select(d =>
+            {
+                d.data.Count = d.@event.Id;
+                return d.data;
+            });
+    }
+
+    public class Data
+    {
+        public int Count
+        {
+            get;set;
+
+        }
+    }
+
+    [Fact]
+    public async Task TestSwitch()
+    {
+        var subject = new Subject<IObservable<int>>();
+
+        var completed = false;
+
+        subject.Switch().Subscribe(
+            v => Logger.LogInformation(v.ToString()),
+            () => completed = true);
+
+        subject.OnNext(Observable.Return(1));
+        subject.OnNext(Observable.Return(2).Delay(TimeSpan.FromSeconds(5)));
+        subject.OnNext(Observable.Return(3).Delay(TimeSpan.FromMilliseconds(500)));
+
+        subject.OnCompleted();
+        while (!completed)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+        }
+    }
+
+
     private IObservable<int> CreateSample(int? nb = null)
     {
         var random = new Random();
@@ -341,4 +477,6 @@ public class Tests : BaseTests
         return Observable.Range(1, nb)
             .Select(i => Observable.Return(i).Delay(TimeSpan.FromMilliseconds(random.Next(500, 2000)))).Concat();
     }
+
+
 }

@@ -61,11 +61,33 @@ public class GrpcClient
         });
     }
 
-    
-    
-    
-    public IObservable<Event> GetObservableEvents(IObservable<int> nbEndedEvents, int? maxNbEvents = null,
-        int? delayMs = null) => null;
+    public IObservable<Event> GetObservableEvents(IObservable<int> nbEndedEvents,int? maxNbEvents = null, int? delayMs = null, int? maxConcurrentNb = null)
+    {
+        return Observable.Create<Event>(async (observer, token) =>
+        {
+            var nbEvents = 0;
+
+            _logger.LogTrace("start reading event stream");
+
+            var stream = _client.ReadEvents(new GetEventsRequest
+                    { MaxNbEvents = maxNbEvents ?? 0, DelayMs = delayMs ?? 0 }, cancellationToken: token)
+                .ResponseStream;
+
+            if (token.IsCancellationRequested) return;
+            var hasData = await stream.MoveNext();
+            while (hasData)
+            {
+                await nbEndedEvents.Where(nb => nbEvents - nb < (maxConcurrentNb ?? 3)).Take(1);
+                nbEvents++;
+                observer.OnNext(stream.Current);
+                _logger.LogTrace("pushed event {id} in stream", stream.Current.Id);
+                if (token.IsCancellationRequested) return;
+                hasData = await stream.MoveNext();
+            }
+
+            observer.OnCompleted();
+        });
+    }
 
 
     public IObservable<Unit> PushEvents(IObservable<Event> events) => Observable.Defer(() =>
